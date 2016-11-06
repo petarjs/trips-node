@@ -20,6 +20,7 @@ console.log('OPEN WEATHER API KEY', process.env.OPEN_WEATHER_API_KEY)
 var Place = require('./place.model').model;
 var User = require('./user.model').model;
 var Group = require('./group.model').model;
+var Vote = require('./vote.model').model;
 
 mongoose.Promise = require('bluebird');
 mongoose.connect('mongodb://localhost/trips');
@@ -219,7 +220,7 @@ app.get('/api/groups/:id', function(req, res) {
     })
 })
 
-function getToken() {
+function getToken(req) {
   var token = req.body.token || req.query.token || req.headers['x-access-token'];
   var decoded = jwt.decode(token, {json: true});
   return decoded._doc._id;
@@ -286,6 +287,32 @@ app.get('/api/groups/:id/places/suggestion', function(req, res) {
       })
     });
   }
+})
+
+app.post('/api/groups/:id/vote', function(req, res) {
+  var groupId = req.params.id;
+  var votedFor = req.body.vote;
+  var placeId = req.body.placeId;
+  var userId = getToken(req);
+
+  var vote = new Vote({
+    group: groupId,
+    vote: votedFor,
+    place: placeId,
+    user: userId
+  })
+
+  vote.save().then(function(newVote) {
+    res.json(newVote);
+  })
+})
+
+app.get('/api/groups/:id/votes', function(req, res) {
+  var groupId = req.param.id;
+
+  Vote.find({ group: groupId }).then(function(votes) {
+    res.json(votes);
+  })
 })
 
 app.listen(3000, function () {
