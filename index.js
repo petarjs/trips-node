@@ -308,7 +308,7 @@ app.post('/api/groups/:id/vote', function(req, res) {
 })
 
 app.get('/api/groups/:id/votes', function(req, res) {
-  var groupId = req.param.id;
+  var groupId = req.params.id;
 
   Vote.find({ group: groupId }).then(function(votes) {
     res.json(votes);
