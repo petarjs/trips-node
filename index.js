@@ -12,6 +12,7 @@ var countriesApi = require('./countries');
 var weatherApi = require('./weather');
 var _ = require('lodash');
 var ObjectId = require('mongodb').ObjectId;
+var customSearchApi = require('./custom-search');
 
 var OPEN_WEATHER_API_KEY = process.env.OPEN_WEATHER_API_KEY;
 console.log('API KEY', process.env.GOOGLE_PLACES_API_KEY)
@@ -273,13 +274,30 @@ app.get('/api/groups/:id/places/suggestion', function(req, res) {
           _.each(weather.data.list, function(day) {
             day.weather[0].iconUrl = 'http://openweathermap.org/img/w/' + day.weather[0].icon + '.png';
           })
-          var place = new Place({
-            place: place,
-            placeDetails: placeDetails.result,
-            weather: weather.data
-          });
-          place.save().then(function(place) {
-            res.json(place);
+
+          customSearchApi.get({
+            q: 'city ' + placeName
+          }).then(function(results) {
+            console.log(_.keys(results))
+
+            var images = [];
+            if(placeDetails.photos) {
+              images = _.take(_.map(_.map(placeDetails.photos, 'photo_reference'), function(ref) {
+                return getPlacePhotoUrl(ref, 400);
+              }), 10)
+            } else {
+              images = _.take(results.items, 10)
+            }
+
+            var placeObj = new Place({
+              place: place,
+              placeDetails: placeDetails.result,
+              weather: weather.data,
+              images: _.take(results.data.items, 10)
+            });
+            placeObj.save().then(function(place2) {
+              res.json(placeObj);
+            })
           })
         });
       }).catch(function(err) {
@@ -310,9 +328,12 @@ app.post('/api/groups/:id/vote', function(req, res) {
 app.get('/api/groups/:id/votes', function(req, res) {
   var groupId = req.params.id;
 
-  Vote.find({ group: groupId }).then(function(votes) {
-    res.json(votes);
-  })
+  Vote
+    .find({ group: groupId })
+    .populate('group place user')
+    .then(function(votes) {
+      res.json(votes);
+    })
 })
 
 app.listen(3000, function () {
