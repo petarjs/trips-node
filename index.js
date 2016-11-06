@@ -9,13 +9,17 @@ var jwt    = require('jsonwebtoken');
 var GoogleLocations = require('google-locations');
 var placesApi = new GoogleLocations(process.env.GOOGLE_PLACES_API_KEY);
 var countriesApi = require('./countries');
+var weatherApi = require('./weather');
 var _ = require('lodash');
+var ObjectId = require('mongodb').ObjectId;
 
+var OPEN_WEATHER_API_KEY = process.env.OPEN_WEATHER_API_KEY;
 console.log('API KEY', process.env.GOOGLE_PLACES_API_KEY)
+console.log('OPEN WEATHER API KEY', process.env.OPEN_WEATHER_API_KEY)
 
 var Place = require('./place.model').model;
-var Group = require('./group.model').model;
 var User = require('./user.model').model;
+var Group = require('./group.model').model;
 
 mongoose.Promise = require('bluebird');
 mongoose.connect('mongodb://localhost/trips');
@@ -39,6 +43,15 @@ var limiter = new RateLimit({
 });
  
 app.use(limiter);
+
+function nocache(req, res, next) {
+  res.header('Cache-Control', 'private, no-cache, no-store, must-revalidate');
+  res.header('Expires', '-1');
+  res.header('Pragma', 'no-cache');
+  next();
+}
+
+app.use(nocache);
 
 app.get('/', function (req, res) {
   res.send('Hello World!');
@@ -88,7 +101,7 @@ app.post('/authenticate', function(req, res) {
   });
 });
 
-app.use(function(req, res, next) {
+app.use('/api',function(req, res, next) {
 
   // check header or url parameters or post parameters for token
   var token = req.body.token || req.query.token || req.headers['x-access-token'];
@@ -142,10 +155,10 @@ app.get('/api/countries', function(req, res) {
         res.json(_.take(countries.data, 10));
       } else {
         var cs = _.filter(countries.data, function(c, index) {
-          return c.name.toLowerCase().indexOf(req.query.q) === 0;
+          return c.name.toLowerCase().indexOf(req.query.q.toLowerCase()) === 0;
         });
 
-        res.json(cs);
+        res.json(_.take(cs, 10));
       }
     })
 
@@ -191,9 +204,88 @@ app.get('/api/groups', function(req, res) {
   var userId = decoded._doc._id;
 
   Group.find({ members: { $in: [userId] }}).then(function(groups) {
-    console.log(groups)
     res.json(groups);
   })
+})
+
+app.get('/api/groups/:id', function(req, res) {
+  var groupId = req.params.id;
+
+  Group
+    .findOne({ _id: groupId })
+    .populate('owner members')
+    .then(function(group) {
+      res.json(group);
+    })
+})
+
+function getToken() {
+  var token = req.body.token || req.query.token || req.headers['x-access-token'];
+  var decoded = jwt.decode(token, {json: true});
+  return decoded._doc._id;
+}
+
+app.post('/api/groups/:id/invite', function(req, res) {
+  var groupId = req.params.id;
+  var username = req.body.username;
+
+  Group
+    .findOne({ _id: groupId })
+    .populate('owner members')
+    .then(function(group) {
+      User.findOne({ username: username }, function(err, user) {
+        group.members.push(user._id);
+        group.save().then(function(record) {
+          Group
+            .findOne({ _id: groupId })
+            .populate('owner members')
+            .then(function(group) {
+              res.json(group);
+            })
+        })
+      })
+    })
+})
+
+var letters = 'ertuiopasdfghjklzcvbnm';
+app.get('/api/groups/:id/places/suggestion', function(req, res) {
+  var groupId = req.params.id;
+
+  Group.findOne({ '_id': groupId }, function(err, group) {
+    var country = group.country;
+    getPlace(country)
+  });
+
+  function getPlace(country) {
+    placesApi.autocomplete({
+      input: country + ' ' + _.sample(letters),
+      types: ['(cities)'],
+    }, function(err, response) {
+      var place = _.sample(_.take(response.predictions, 50));
+      if(!place || !response.predictions.length) {
+        getPlace(country);
+        return;
+      }
+      var placeName = place.structured_formatting.main_text;
+      weatherApi.get({ city: placeName, count: 5, appId: OPEN_WEATHER_API_KEY }).then(function(weather) {
+        placesApi.details({ placeid: place.place_id }, function(err, placeDetails) {
+          _.each(weather.data.list, function(day) {
+            day.weather[0].iconUrl = 'http://openweathermap.org/img/w/' + day.weather[0].icon + '.png';
+          })
+          var place = new Place({
+            place: place,
+            placeDetails: placeDetails.result,
+            weather: weather.data
+          });
+          place.save().then(function(place) {
+            res.json(place);
+          })
+        });
+      }).catch(function(err) {
+        res.json(err)
+      })
+    });
+  }
 })
 
 app.listen(3000, function () {

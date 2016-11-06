@@ -2,12 +2,10 @@ var mongoose = require('mongoose');
 var Schema = mongoose.Schema;
 
 var PlaceSchema = new Schema({
-  name: String,
+  place: Object,
+  placeDetails: Object,
+  weather: Object
 });
-
-PlaceSchema.statics.findByName = function(name, cb) {
-  return { name: 'asdf' };
-};
 
 var Place = mongoose.model('Place', PlaceSchema);
 

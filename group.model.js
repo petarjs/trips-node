@@ -5,9 +5,9 @@ var ObjectId = Schema.ObjectId;
 var GroupSchema = new Schema({
   name: String,
   country: String,
-  owner: ObjectId,
+  owner: { type: ObjectId, ref: 'User' },
   photo: String,
-  members: [ObjectId]
+  members: [{ type: ObjectId, ref: 'User' }]
 });
 
 var Group = mongoose.model('Group', GroupSchema);
