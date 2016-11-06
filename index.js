@@ -57,7 +57,8 @@ app.post('/authenticate', function(req, res) {
 
   // find the user
   User.findOne({
-    name: req.body.name
+    name: req.body.name,
+    password: req.body.password
   }, function(err, user) {
 
     if (err) throw err;
@@ -68,6 +69,7 @@ app.post('/authenticate', function(req, res) {
 
       // check if password matches
       if (user.password != req.body.password) {
+        console.log(user, req.body.password);
         res.json({ success: false, message: 'Authentication failed. Wrong password.' });
       } else {
 
@@ -149,6 +151,10 @@ app.get('/api/countries', function(req, res) {
 
 })
 
+function getPlacePhotoUrl(ref, width) {
+  return 'https://maps.googleapis.com/maps/api/place/photo?photoreference=' + ref + '&key=' + process.env.GOOGLE_PLACES_API_KEY + '&maxwidth=' + width;
+}
+
 app.post('/api/groups', function(req, res) {
   var country = req.body.country;
   var name = req.body.name;
@@ -156,14 +162,38 @@ app.post('/api/groups', function(req, res) {
   var token = req.body.token || req.query.token || req.headers['x-access-token'];
   var decoded = jwt.decode(token, {json: true});
   var userId = decoded._doc._id;
-  console.log(req.body)
   User.findOne({_id: userId}).then(function(user) {
-    var group = new Group({ country: country, name: name, owner: user._id })
-    group.save().then(function(record) {
-      res.json(record);
+    placesApi.autocomplete({
+      input: country,
+    }, function(err, response) {
+      var countryData = response.predictions[0];
+      placesApi.details({ placeid: countryData.place_id }, function(err, placeDetails) {
+        var group = new Group({
+          country: country,
+          name: name,
+          owner: user._id,
+          googlePlaceId: countryData.place_id,
+          photo: getPlacePhotoUrl(placeDetails.result.photos[0].photo_reference, 800),
+          members: [user]
+        })
+        group.save().then(function(record) {
+          res.json(record);
+        })
+      })
     })
   })
 
+})
+
+app.get('/api/groups', function(req, res) {
+  var token = req.body.token || req.query.token || req.headers['x-access-token'];
+  var decoded = jwt.decode(token, {json: true});
+  var userId = decoded._doc._id;
+
+  Group.find({ members: { $in: [userId] }}).then(function(groups) {
+    console.log(groups)
+    res.json(groups);
+  })
 })
 
 app.listen(3000, function () {
