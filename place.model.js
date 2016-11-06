@@ -5,7 +5,7 @@ var PlaceSchema = new Schema({
   place: Object,
   placeDetails: Object,
   weather: Object,
-  images: Object
+  image: Object
 });
 
 var Place = mongoose.model('Place', PlaceSchema);

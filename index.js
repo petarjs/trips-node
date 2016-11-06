@@ -10,6 +10,7 @@ var GoogleLocations = require('google-locations');
 var placesApi = new GoogleLocations(process.env.GOOGLE_PLACES_API_KEY);
 var countriesApi = require('./countries');
 var weatherApi = require('./weather');
+var wikiApi = require('./wiki');
 var _ = require('lodash');
 var ObjectId = require('mongodb').ObjectId;
 var customSearchApi = require('./custom-search');
@@ -275,30 +276,28 @@ app.get('/api/groups/:id/places/suggestion', function(req, res) {
             day.weather[0].iconUrl = 'http://openweathermap.org/img/w/' + day.weather[0].icon + '.png';
           })
 
-          customSearchApi.get({
-            q: 'city ' + placeName
-          }).then(function(results) {
-            console.log(_.keys(results))
-
-            var images = [];
-            if(placeDetails.photos) {
-              images = _.take(_.map(_.map(placeDetails.photos, 'photo_reference'), function(ref) {
-                return getPlacePhotoUrl(ref, 400);
-              }), 10)
-            } else {
-              images = _.take(results.items, 10)
+          wikiApi.getImage(placeName).then(function(resultObj) {
+            var pages = resultObj.data.query.pages;
+            var first = _.first(_.keys(pages));
+            var imageObjectWiki = pages[first];
+            
+            console.log(imageObjectWiki)
+            var tryImage = '';
+            if(imageObjectWiki && imageObjectWiki.thumbnail && imageObjectWiki.thumbnail.source) {
+              tryImage = imageObjectWiki.thumbnail.source;
             }
-
+            
             var placeObj = new Place({
               place: place,
               placeDetails: placeDetails.result,
               weather: weather.data,
-              images: _.take(results.data.items, 10)
+              image: tryImage
             });
             placeObj.save().then(function(place2) {
-              res.json(placeObj);
+              res.json(place2);
             })
           })
+
         });
       }).catch(function(err) {
         res.json(err)
@@ -320,7 +319,7 @@ app.post('/api/groups/:id/vote', function(req, res) {
     user: userId
   })
 
-  vote.save().then(function(newVote) {
+  vote.save({validateBeforeSave: false}).then(function(newVote) {
     res.json(newVote);
   })
 })
@@ -330,7 +329,7 @@ app.get('/api/groups/:id/votes', function(req, res) {
 
   Vote
     .find({ group: groupId })
-    .populate('group place user')
+    .populate('group group.members place user')
     .then(function(votes) {
       res.json(votes);
     })

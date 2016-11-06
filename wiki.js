@@ -8,10 +8,25 @@ function get(term) {
     params: {
       format: 'json',
       action: 'query',
+      exintro: '',
+      explaintext: '',
       prop: 'extracts',
       titles: term
     }
   });
 }
 
-exports.getAll = getAll;
+function getImage(place) {
+  return http.get(API, {
+    params: {
+      format: 'json',
+      action: 'query',
+      pithumbsize: 700,
+      prop: 'pageimages',
+      titles: place
+    }
+  });
+}
+
+exports.get = get;
+exports.getImage = getImage;
