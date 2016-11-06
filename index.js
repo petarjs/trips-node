@@ -14,6 +14,7 @@ var _ = require('lodash');
 console.log('API KEY', process.env.GOOGLE_PLACES_API_KEY)
 
 var Place = require('./place.model').model;
+var Group = require('./group.model').model;
 var User = require('./user.model').model;
 
 mongoose.Promise = require('bluebird');
@@ -72,7 +73,7 @@ app.post('/authenticate', function(req, res) {
 
         // if user is found and password is right
         // create a token
-        var token = jwt.sign(user, app.get('superSecret'), {});
+        var token = jwt.sign(user, app.get('superSecret'));
 
         // return the information including token as JSON
         res.json({
@@ -141,10 +142,27 @@ app.get('/api/countries', function(req, res) {
         var cs = _.filter(countries.data, function(c, index) {
           return c.name.toLowerCase().indexOf(req.query.q) === 0;
         });
-        
+
         res.json(cs);
       }
     })
+
+})
+
+app.post('/api/groups', function(req, res) {
+  var country = req.body.country;
+  var name = req.body.name;
+
+  var token = req.body.token || req.query.token || req.headers['x-access-token'];
+  var decoded = jwt.decode(token, {json: true});
+  var userId = decoded._doc._id;
+  console.log(req.body)
+  User.findOne({_id: userId}).then(function(user) {
+    var group = new Group({ country: country, name: name, owner: user._id })
+    group.save().then(function(record) {
+      res.json(record);
+    })
+  })
 
 })
 
